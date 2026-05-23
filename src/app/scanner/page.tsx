@@ -106,80 +106,93 @@ export default function ScannerPage() {
   }
 
   const scan = async () => {
-    setError(null)
-    setResult(null)
-    setLoading(true)
-    const interval = runLoadingCycle()
+  setError(null)
+  setResult(null)
+  setLoading(true)
+  const interval = runLoadingCycle()
 
-    try {
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const token = user ? await user.getIdToken() : ''
-      const authHeader = { 'Authorization': `Bearer ${token}` }
-      if (tab === 'text') {
-        if (!textInput.trim()) { setError('Please enter some text to analyze.'); setLoading(false); clearInterval(interval); return }
-        const res = await fetch(`${API}/api/analyze/text`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: textInput }),
-        })
-        if (!res.ok) throw new Error(`Server error: ${res.status}`)
-        const data = await res.json()
-        setResult(data)
-        try {
-          const id = await saveScan('text', textInput, {
-            risk_score: data.risk_score, risk_level: data.risk_level,
-            red_flags: data.red_flags, explanation: data.explanation,
-            recommendations: data.recommendations,
-          })
-          setSavedId(id)
-        } catch (e) { console.warn('Firebase save failed:', e) }
-
-      } else if (tab === 'image') {
-        if (!imageFile) { setError('Please upload an image.'); setLoading(false); clearInterval(interval); return }
-        const form = new FormData()
-        form.append('file', imageFile)
-        const res = await fetch(`${API}/api/analyze/image`, { method: 'POST', body: form })
-        if (!res.ok) throw new Error(`Server error: ${res.status}`)
-        const data = await res.json()
-        setResult(data)
-        try {
-          const id = await saveScan('image', imageFile.name, {
-            risk_score: data.risk_score, risk_level: data.risk_level,
-            red_flags: data.red_flags, explanation: data.explanation,
-            recommendations: data.recommendations,
-            extracted_text: data.extracted_text,
-          })
-          setSavedId(id)
-        } catch (e) { console.warn('Firebase save failed:', e) }
-
-      } else {
-        if (!urlInput.trim()) { setError('Please enter a URL to analyze.'); setLoading(false); clearInterval(interval); return }
-        const res = await fetch(`${API}/api/analyze/url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: urlInput }),
-        })
-        if (!res.ok) throw new Error(`Server error: ${res.status}`)
-        const data = await res.json()
-        setResult(data)
-        try {
-          const id = await saveScan('url', urlInput, {
-            risk_score: data.risk_score, risk_level: data.risk_level,
-            red_flags: data.red_flags, explanation: data.explanation,
-            recommendations: data.recommendations,
-          })
-          setSavedId(id)
-        } catch (e) { console.warn('Firebase save failed:', e) }
-      }
-
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      setError(`Analysis failed: ${msg}. Make sure your backend is running.`)
-    } finally {
-      clearInterval(interval)
-      setLoading(false)
-    }
+  // ✅ guard — user is always defined here because of the sign-in wall above
+  if (!user) {
+    setError('You must be signed in to scan.')
+    setLoading(false)
+    clearInterval(interval)
+    return
   }
+
+  try {
+    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const token = await user.getIdToken()
+    const authHeader = { 'Authorization': `Bearer ${token}` }
+
+    if (tab === 'text') {
+      if (!textInput.trim()) { setError('Please enter some text to analyze.'); setLoading(false); clearInterval(interval); return }
+      const res = await fetch(`${API}/api/analyze/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },  // ✅ added
+        body: JSON.stringify({ text: textInput }),
+      })
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const data = await res.json()
+      setResult(data)
+      try {
+        const id = await saveScan('text', textInput, {
+          risk_score: data.risk_score, risk_level: data.risk_level,
+          red_flags: data.red_flags, explanation: data.explanation,
+          recommendations: data.recommendations,
+        }, user.uid)
+        setSavedId(id)
+      } catch (e) { console.warn('Firebase save failed:', e) }
+
+    } else if (tab === 'image') {
+      if (!imageFile) { setError('Please upload an image.'); setLoading(false); clearInterval(interval); return }
+      const form = new FormData()
+      form.append('file', imageFile)
+      const res = await fetch(`${API}/api/analyze/image`, {
+        method: 'POST',
+        headers: { ...authHeader },  // ✅ added (no Content-Type for FormData)
+        body: form,
+      })
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const data = await res.json()
+      setResult(data)
+      try {
+        const id = await saveScan('image', imageFile.name, {
+          risk_score: data.risk_score, risk_level: data.risk_level,
+          red_flags: data.red_flags, explanation: data.explanation,
+          recommendations: data.recommendations,
+          extracted_text: data.extracted_text,
+        }, user.uid)
+        setSavedId(id)
+      } catch (e) { console.warn('Firebase save failed:', e) }
+
+    } else {
+      if (!urlInput.trim()) { setError('Please enter a URL to analyze.'); setLoading(false); clearInterval(interval); return }
+      const res = await fetch(`${API}/api/analyze/url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },  // ✅ added
+        body: JSON.stringify({ url: urlInput }),
+      })
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const data = await res.json()
+      setResult(data)
+      try {
+        const id = await saveScan('url', urlInput, {
+          risk_score: data.risk_score, risk_level: data.risk_level,
+          red_flags: data.red_flags, explanation: data.explanation,
+          recommendations: data.recommendations,
+        }, user.uid)
+        setSavedId(id)
+      } catch (e) { console.warn('Firebase save failed:', e) }
+    }
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    setError(`Analysis failed: ${msg}. Make sure your backend is running.`)
+  } finally {
+    clearInterval(interval)
+    setLoading(false)
+  }
+}
 
   const riskConfig = result?.risk_level ? RISK_CONFIG[result.risk_level] : null
   const scorePercent = result?.risk_score ?? 0
@@ -206,6 +219,7 @@ export default function ScannerPage() {
       </p>
       <button
         onClick={signInWithGoogle}
+        disabled={authLoading}
         style={{
           background: 'var(--cyan)', color: '#000', border: 'none',
           borderRadius: 10, padding: '14px 36px', fontSize: 15,

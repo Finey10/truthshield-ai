@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getRecentScans, type ScanRecord } from '@/lib/firebase'
+import { getRecentScans, auth, type ScanRecord } from '@/lib/firebase'
+import { onAuthStateChanged, User } from 'firebase/auth'
 import { Timestamp } from 'firebase/firestore'
 
 const RISK_COLORS = {
@@ -20,15 +21,69 @@ export default function HistoryPage() {
   const [filter, setFilter] = useState<'all' | 'safe' | 'suspicious' | 'dangerous'>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
+  // Auth listener
   useEffect(() => {
-    getRecentScans(50)
+    return onAuthStateChanged(auth, (u) => {
+      setUser(u)
+      setAuthLoading(false)
+    })
+  }, [])
+
+  // Fetch scans once user is known
+  useEffect(() => {
+    if (!user) return
+    setLoading(true)
+    setError(null)
+    getRecentScans(user.uid, 50)
       .then(data => setRecords(data))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
+
+  const fetchScans = () => {
+    if (!user) return
+    setLoading(true)
+    setError(null)
+    getRecentScans(user.uid, 50)
+      .then(data => setRecords(data))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }
 
   const filtered = filter === 'all' ? records : records.filter(r => r.risk_level === filter)
+
+  // ── Auth loading ──────────────────────────────────────────────
+  if (authLoading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <span style={{ color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>Initializing...</span>
+    </div>
+  )
+
+  // ── Not signed in ─────────────────────────────────────────────
+  if (!user) return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', height: '100vh', gap: 20, padding: 24,
+    }}>
+      <div style={{ fontSize: 48 }}>🔒</div>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800 }}>
+        Sign in to view history
+      </h2>
+      <p style={{ color: 'var(--text2)', fontSize: 14, textAlign: 'center', maxWidth: 320 }}>
+        Your scan history is private and linked to your account.
+      </p>
+      <Link href="/scanner" style={{
+        background: 'var(--cyan)', color: '#000', padding: '12px 32px',
+        borderRadius: 10, fontFamily: 'var(--font-display)', fontWeight: 700,
+        fontSize: 14, textDecoration: 'none',
+      }}>
+        Go to Scanner →
+      </Link>
+    </div>
+  )
 
   return (
     <div style={{ paddingTop: 80, minHeight: '100vh', padding: '80px 24px 60px' }}>
@@ -43,6 +98,9 @@ export default function HistoryPage() {
           </h1>
           <p style={{ color: 'var(--text2)', fontSize: 14 }}>
             All your previous scans, saved to Firebase Firestore.
+          </p>
+          <p style={{ color: 'var(--text3)', fontSize: 12, marginTop: 6, fontFamily: 'var(--font-mono)' }}>
+            Signed in as {user.email}
           </p>
         </div>
 
@@ -66,14 +124,7 @@ export default function HistoryPage() {
 
           {/* Refresh button */}
           <button
-            onClick={() => {
-              setLoading(true)
-              setError(null)
-              getRecentScans(50)
-                .then(data => setRecords(data))
-                .catch(e => setError(e.message))
-                .finally(() => setLoading(false))
-            }}
+            onClick={fetchScans}
             style={{
               marginLeft: 'auto', padding: '7px 14px', borderRadius: 8,
               border: '1px solid var(--border)', background: 'transparent',
