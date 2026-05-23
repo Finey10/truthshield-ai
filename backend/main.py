@@ -89,7 +89,7 @@ rather than just "urgency language". Always output valid JSON."""
 
 async def analyse_with_groq(text: str) -> dict:
     response = groq_client.chat.completions.create(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": f"Analyse this content for threats:\n\n{text}"}

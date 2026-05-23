@@ -56,24 +56,40 @@ export default function ScannerPage() {
     })
   }, [])
 
-  // QR scanner
-  useEffect(() => {
-    if (!showQR) return
-    const scanner = new Html5Qrcode('qr-reader')
-    qrRef.current = scanner
-    scanner.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: 250 },
-      (decoded) => {
-        setUrlInput(decoded)
-        setTab('url')
-        setShowQR(false)
-        scanner.stop()
-      },
-      undefined
-    )
-    return () => { scanner.stop().catch(() => {}) }
-  }, [showQR])
+// QR scanner
+useEffect(() => {
+  if (!showQR) return
+
+  const scanner = new Html5Qrcode('qr-reader')
+  qrRef.current = scanner
+  let started = false
+
+  scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: 250 },
+    (decoded) => {
+      setUrlInput(decoded)
+      setTab('url')
+      setShowQR(false)
+    },
+    undefined
+  ).then(() => {
+    started = true
+  }).catch((err) => {
+    console.warn('QR start failed:', err)
+  })
+
+  return () => {
+    if (started) {
+      scanner.stop().catch(() => {})
+    } else {
+      // scanner didn't start yet, wait a bit then stop
+      setTimeout(() => {
+        scanner.stop().catch(() => {})
+      }, 500)
+    }
+  }
+}, [showQR])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
